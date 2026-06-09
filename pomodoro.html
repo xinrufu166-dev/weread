@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番茄钟</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --focus-bg1: #1a1a2e; --focus-bg2: #16213e; --focus-bg3: #0f3460;
+    --focus-accent: #e74c3c; --focus-glow: rgba(231,76,60,0.4);
+    --short-bg1: #0d2137; --short-bg2: #0a3d2b; --short-bg3: #0d4f38;
+    --short-accent: #2ecc71; --short-glow: rgba(46,204,113,0.4);
+    --long-bg1: #1a0a2e; --long-bg2: #2d1b4e; --long-bg3: #1a0a2e;
+    --long-accent: #9b59b6; --long-glow: rgba(155,89,182,0.4);
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: linear-gradient(135deg, var(--focus-bg1), var(--focus-bg2), var(--focus-bg3));
+    transition: background 0.6s ease;
+    overflow: hidden;
+    position: relative;
+    user-select: none;
+  }
+
+  /* Ambient glow blobs */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.15;
+    pointer-events: none;
+    transition: background 0.6s ease;
+  }
+  body::before {
+    width: 400px; height: 400px;
+    top: -100px; left: -100px;
+    background: var(--accent, #e74c3c);
+  }
+  body::after {
+    width: 300px; height: 300px;
+    bottom: -80px; right: -80px;
+    background: var(--accent, #e74c3c);
+  }
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header { text-align: center; }
+  .title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    transition: background 0.3s, transform 0.3s;
+  }
+  .dot.filled {
+    background: var(--accent, #e74c3c);
+    transform: scale(1.15);
+  }
+  .pomodoro-count {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    margin-left: 4px;
+    min-width: 20px;
+  }
+
+  /* Mode selector */
+  .mode-selector {
+    display: flex;
+    background: rgba(255,255,255,0.07);
+    border-radius: 50px;
+    padding: 4px;
+    gap: 2px;
+  }
+  .mode-btn {
+    padding: 8px 18px;
+    border-radius: 50px;
+    border: none;
+    background: transparent;
+    color: rgba(255,255,255,0.4);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    font-family: inherit;
+  }
+  .mode-btn.active {
+    background: rgba(255,255,255,0.16);
+    color: #fff;
+  }
+  .mode-btn:hover:not(.active) {
+    color: rgba(255,255,255,0.7);
+  }
+
+  /* Ring */
+  .ring-wrapper {
+    position: relative;
+    width: 280px; height: 280px;
+  }
+  .ring-svg {
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+  }
+  .ring-track {
+    fill: none;
+    stroke: rgba(255,255,255,0.08);
+    stroke-width: 12;
+  }
+  .ring-progress {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear, stroke 0.6s ease;
+  }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .timer-display {
+    font-size: 64px;
+    font-weight: 200;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    letter-spacing: -2px;
+    line-height: 1;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+  .mode-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  .ctrl-btn {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.09);
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+    font-size: 18px;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.16); transform: scale(1.05); }
+  .ctrl-btn:active { transform: scale(0.95); }
+
+  .play-btn {
+    width: 80px; height: 80px;
+    background: var(--accent, #e74c3c);
+    box-shadow: 0 6px 24px var(--glow, rgba(231,76,60,0.4));
+    font-size: 26px;
+    transition: background 0.4s, box-shadow 0.4s, transform 0.15s;
+  }
+  .play-btn:hover { filter: brightness(1.1); transform: scale(1.05); }
+  .play-btn:active { transform: scale(0.95); }
+
+  /* Notification toast */
+  .toast {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+
+  /* Pulse animation when running */
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.012); }
+  }
+  .ring-wrapper.running { animation: pulse 2.5s ease-in-out infinite; }
+
+  /* Tick flash */
+  @keyframes tick-flash {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <div class="title">番茄钟</div>
+    <div class="dots">
+      <div class="dot" id="d0"></div>
+      <div class="dot" id="d1"></div>
+      <div class="dot" id="d2"></div>
+      <div class="dot" id="d3"></div>
+      <span class="pomodoro-count" id="totalCount"></span>
+    </div>
+  </div>
+
+  <div class="mode-selector">
+    <button class="mode-btn active" data-mode="focus">专注</button>
+    <button class="mode-btn" data-mode="short">短休息</button>
+    <button class="mode-btn" data-mode="long">长休息</button>
+  </div>
+
+  <div class="ring-wrapper" id="ringWrapper">
+    <svg class="ring-svg" viewBox="0 0 280 280">
+      <circle class="ring-track" cx="140" cy="140" r="119"/>
+      <circle class="ring-progress" id="ringProgress" cx="140" cy="140" r="119"/>
+    </svg>
+    <div class="ring-center">
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      <div class="mode-label" id="modeLabel">专注</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn" id="resetBtn" title="重置">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+      </svg>
+    </button>
+    <button class="ctrl-btn play-btn" id="playBtn" title="开始/暂停">
+      <svg id="playIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+    </button>
+    <button class="ctrl-btn" id="skipBtn" title="跳过">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MODES = {
+  focus: { label: '专注', duration: 25 * 60,
+    bg: ['#1a1a2e','#16213e','#0f3460'], accent: '#e74c3c', glow: 'rgba(231,76,60,0.4)' },
+  short: { label: '短休息', duration: 5 * 60,
+    bg: ['#0d2137','#0a3d2b','#0d4f38'], accent: '#2ecc71', glow: 'rgba(46,204,113,0.4)' },
+  long:  { label: '长休息', duration: 15 * 60,
+    bg: ['#1a0a2e','#2d1b4e','#1a0a2e'], accent: '#9b59b6', glow: 'rgba(155,89,182,0.4)' },
+};
+
+const CIRCUMFERENCE = 2 * Math.PI * 119; // ~747.7
+
+let currentMode = 'focus';
+let timeRemaining = MODES.focus.duration;
+let isRunning = false;
+let completedPomodoros = 0;
+let timerInterval = null;
+let toastTimeout = null;
+
+// DOM refs
+const body = document.body;
+const timerDisplay = document.getElementById('timerDisplay');
+const modeLabel = document.getElementById('modeLabel');
+const ringProgress = document.getElementById('ringProgress');
+const ringWrapper = document.getElementById('ringWrapper');
+const playBtn = document.getElementById('playBtn');
+const playIcon = document.getElementById('playIcon');
+const resetBtn = document.getElementById('resetBtn');
+const skipBtn = document.getElementById('skipBtn');
+const toast = document.getElementById('toast');
+const totalCount = document.getElementById('totalCount');
+const modeBtns = document.querySelectorAll('.mode-btn');
+const dots = [0,1,2,3].map(i => document.getElementById('d'+i));
+
+// Init ring
+ringProgress.style.strokeDasharray = CIRCUMFERENCE;
+ringProgress.style.strokeDashoffset = 0;
+
+function fmt(secs) {
+  const m = Math.floor(secs / 60).toString().padStart(2,'0');
+  const s = (secs % 60).toString().padStart(2,'0');
+  return `${m}:${s}`;
+}
+
+function applyTheme(modeName) {
+  const m = MODES[modeName];
+  body.style.background = `linear-gradient(135deg, ${m.bg[0]}, ${m.bg[1]}, ${m.bg[2]})`;
+  document.documentElement.style.setProperty('--accent', m.accent);
+  document.documentElement.style.setProperty('--glow', m.glow);
+  playBtn.style.background = m.accent;
+  playBtn.style.boxShadow = `0 6px 24px ${m.glow}`;
+  ringProgress.style.stroke = m.accent;
+}
+
+function updateRing() {
+  const total = MODES[currentMode].duration;
+  const progress = timeRemaining / total;
+  ringProgress.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+}
+
+function updateDots() {
+  const inCycle = completedPomodoros % 4;
+  dots.forEach((d, i) => d.classList.toggle('filled', i < inCycle));
+  const sets = Math.floor(completedPomodoros / 4);
+  totalCount.textContent = sets > 0 ? `×${sets}` : (completedPomodoros > 0 ? '' : '');
+}
+
+function render() {
+  timerDisplay.textContent = fmt(timeRemaining);
+  document.title = `${fmt(timeRemaining)} · ${MODES[currentMode].label}`;
+  updateRing();
+  updateDots();
+}
+
+function setMode(modeName, autoStart = false) {
+  if (isRunning) pause();
+  currentMode = modeName;
+  timeRemaining = MODES[modeName].duration;
+  applyTheme(modeName);
+  modeLabel.textContent = MODES[modeName].label;
+  modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === modeName));
+  render();
+  if (autoStart) start();
+}
+
+function start() {
+  if (isRunning) return;
+  isRunning = true;
+  ringWrapper.classList.add('running');
+  playIcon.innerHTML = '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>';
+  timerInterval = setInterval(tick, 1000);
+}
+
+function pause() {
+  isRunning = false;
+  ringWrapper.classList.remove('running');
+  playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+  clearInterval(timerInterval);
+  timerInterval = null;
+}
+
+function tick() {
+  if (timeRemaining <= 0) { complete(); return; }
+  timeRemaining--;
+  render();
+}
+
+function complete() {
+  pause();
+  if (currentMode === 'focus') {
+    completedPomodoros++;
+    updateDots();
+    const isLong = completedPomodoros % 4 === 0;
+    showToast(isLong ? '🎉 完成4个番茄！休息一下吧' : '✅ 专注结束，短暂休息');
+    setTimeout(() => setMode(isLong ? 'long' : 'short', true), 1200);
+  } else {
+    showToast('⏰ 休息结束，开始新的专注！');
+    setTimeout(() => setMode('focus', true), 1200);
+  }
+  // Browser notification
+  if (Notification.permission === 'granted') {
+    new Notification('番茄钟', {
+      body: currentMode === 'focus' ? '专注时间结束！' : '休息结束，继续专注！',
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍅</text></svg>'
+    });
+  }
+}
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// Event listeners
+playBtn.addEventListener('click', () => isRunning ? pause() : start());
+resetBtn.addEventListener('click', () => {
+  pause();
+  timeRemaining = MODES[currentMode].duration;
+  render();
+});
+skipBtn.addEventListener('click', () => {
+  const next = currentMode === 'focus'
+    ? (completedPomodoros % 4 === 3 ? 'long' : 'short')
+    : 'focus';
+  setMode(next);
+});
+modeBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); isRunning ? pause() : start(); }
+  if (e.code === 'KeyR') { resetBtn.click(); }
+  if (e.code === 'KeyF') setMode('focus');
+  if (e.code === 'KeyS') setMode('short');
+  if (e.code === 'KeyL') setMode('long');
+});
+
+// Request notification permission
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// Init
+applyTheme('focus');
+render();
+</script>
+</body>
+</html>
